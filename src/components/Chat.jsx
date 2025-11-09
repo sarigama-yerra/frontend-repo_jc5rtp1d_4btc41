@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Send } from 'lucide-react';
 
-const systemPrompt = `You are AURA, an empathetic and emotionally intelligent mental health support chatbot.\n- Empathy first.\n- Safety and sensitivity: if user mentions self-harm or crisis, encourage immediate help (988 in U.S.) with warm concern.\n- No diagnosis or medication advice.\n- Offer brief, evidence-based coping tools (breathing, grounding, CBT reframing, journaling, mindfulness).\n- Warm, calm, non-judgmental tone.\n- Mirror user's tone while guiding toward safety and constructive coping.`;
+const AURA_SYSTEM = `You are AURA, an empathetic and emotionally intelligent mental health support chatbot.
+- Empathy first.
+- Safety and sensitivity: if user mentions self-harm or crisis, encourage immediate help (988 in U.S.) with warm concern.
+- No diagnosis or medication advice.
+- Offer brief, evidence-based coping tools (breathing, grounding, CBT reframing, journaling, mindfulness).
+- Warm, calm, non-judgmental tone.
+- Mirror user's tone while guiding toward safety and constructive coping.`;
 
 function Message({ role, content }) {
   const isUser = role === 'user';
@@ -35,10 +41,30 @@ export default function Chat() {
     setInput('');
     setLoading(true);
 
-    try {
-      // Simple, local mock of assistant behavior (no backend needed for now)
-      const userText = input.toLowerCase();
+    const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
 
+    try {
+      const res = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [
+            { role: 'system', content: AURA_SYSTEM },
+            ...newMessages,
+          ],
+          max_tokens: 300,
+          temperature: 0.6,
+        }),
+      });
+
+      if (!res.ok) throw new Error('Network response was not ok');
+      const data = await res.json();
+      const reply = data.reply || "I'm here with you. How can I support you right now?";
+
+      setMessages((prev) => [...prev, { role: 'assistant', content: reply }]);
+    } catch (err) {
+      // fallback local response for resilience
+      const userText = input.toLowerCase();
       const crisis = /(suicide|kill myself|self-harm|end it|hurt myself)/i.test(userText);
       let reply = '';
       if (crisis) {
@@ -52,13 +78,8 @@ export default function Chat() {
       } else {
         reply = "Thank you for sharing that. I’m listening. What feels hardest about this right now? We can take it one small step at a time.";
       }
-
-      // include system framing subtly
       reply = reply + "\n\n(Kind reminder: I’m a supportive companion, not a substitute for professional care.)";
-
-      setMessages([...newMessages, { role: 'assistant', content: reply }]);
-    } catch (err) {
-      setMessages([...newMessages, { role: 'assistant', content: "I ran into an issue responding just now. Would you like to try again?" }]);
+      setMessages((prev) => [...prev, { role: 'assistant', content: reply }]);
     } finally {
       setLoading(false);
     }
